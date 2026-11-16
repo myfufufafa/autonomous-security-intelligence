@@ -9,6 +9,11 @@ Damn Vulnerable DeFi) — clone `--depth 1` ke `/tmp/dvd` (1,6 MB).
 penyesuaian dependensi, lihat §1). Tantangan #1 SELESAI — baseline tercatat.
 **Update fase C (16 Nov 2026 ~21:46 WIB): full port SIAP, tantangan #2
 Naive Receiver + #3 Truster SELESAI — skor 3/13.** 10 tantangan tersisa.
+**Update fase D (16 Nov 2026 ~21:54 WIB): tantangan #4 Side-Entrance,
+#5 The Rewarder, #6 Selfie SELESAI — skor 6/13.** 7 tantangan tersisa.
+File test Unstoppable di full port juga sudah diisi exploit #1 (sebelumnya
+kosong — solusinya hanya ada di proyek minimal); keenam tantangan kini
+lolos di SATU tempat yang sama (`/tmp/dvd`, `forge test` 6/6 PASS).
 
 ## 1. Setup port — hasil uji
 
@@ -105,7 +110,8 @@ mengukur EKSEKUSI (setup + solve + verifikasi berjalan), BUKAN penemuan
 dari nol. Tantangan yang lebih sulit (truster, side-entrance, rewarder,
 selfie, climber, ...) adalah pengukur yang sesungguhnya — di situlah
 baseline akan diuji ulang di pass berikut. Skor baseline saat ini:
-**3/13 tantangan selesai** (Unstoppable #1, Naive Receiver #2, Truster #3).
+**6/13 tantangan selesai** (Unstoppable #1, Naive Receiver #2, Truster #3,
+Side-Entrance #4, The Rewarder #5, Selfie #6).
 
 ## 4. Yang dibawa ke perburuan
 
@@ -128,7 +134,9 @@ baseline akan diuji ulang di pass berikut. Skor baseline saat ini:
   berhasil, `forge build` repo penuh OK.
 - [x] Kerjakan tantangan #2 naive-receiver → #3 truster — **SELESAI
   (lihat §6–§7)**.
-- [ ] Kerjakan tantangan #4–#13, catat per tantangan: akurasi,
+- [x] Kerjakan tantangan #4 side-entrance → #5 the-rewarder → #6 selfie
+  — **SELESAI 16 Nov 2026 ~21:54 WIB (fase D, lihat §9–§11)**.
+- [ ] Kerjakan tantangan #7–#13, catat per tantangan: akurasi,
   root cause, false positive, waktu.
 - [ ] Bandingkan baseline SEBELUM vs SESUDAH skill baru dipakai (item #1
   invariant testing, item #4 aeon sc-audit) — itulah fungsi benchmark ini.
@@ -300,3 +308,262 @@ ini adalah tantangan DVD paling awal/paling dikenal — polanya sebagian
 sudah saya kenal dari literatur. Pengukur sesungguhnya adalah tantangan
 #4+ (side-entrance, rewarder, selfie, climber, ...), yang menuntut
 chaining + interaksi multi-kontrak.
+
+## 9. Tantangan #4 — Side-Entrance (fase D, 16 Nov 2026 ~21:53 WIB)
+
+**Deskripsi:** pool lending ETH 1.000 ETH, flash loan gratis. Tujuan:
+kuras seluruh ETH pool ke attacker.
+
+**Kontrak yang dibaca (sebelum solve):**
+`src/Contracts/side-entrance/SideEntranceLenderPool.sol` (47 baris),
+test `SideEntrance.t.sol` (syarat sukses: saldo pool 0, saldo attacker
+bertambah).
+
+### Root cause (identifikasi sendiri dari membaca kode)
+
+```solidity
+function flashLoan(uint256 amount) external {
+    uint256 balanceBefore = address(this).balance;
+    if (balanceBefore < amount) revert NotEnoughETHInPool();
+    IFlashLoanEtherReceiver(msg.sender).execute{value: amount}();
+    if (address(this).balance < balanceBefore) {
+        revert FlashLoanHasNotBeenPaidBack();
+    }
+}
+```
+
+Satu cacat: flash loan hanya mengecek saldo ETH pool kembali seperti
+semula — ia TIDAK mengecek BAGAIMANA saldo itu kembali. Pool punya
+fungsi `deposit()` yang mengkredit `balances[msg.sender]` untuk ETH apa
+pun yang dikirim, dan `withdraw()` yang membayar kembali saldo tercatat
+itu. Jadi di dalam callback `execute()`, penyerang cukup memanggil
+`deposit{value: 1.000 ether}()` — ETH pinjaman "kembali" ke pool dan
+cek flash loan lolos, padahal ETH itu kini tercatat sebagai DEPOSIT milik
+penyerang. Setelah callback, `withdraw()` menariknya keluar secara sah
+menurut akuntansi pool. Ini varian lain dari pola yang sama dengan #1:
+**cek saldo ≠ cek akuntansi** — saldo kembali, tapi kepemilikan sudah
+berpindah.
+
+**Kelas bug:** flash loan yang bisa dilunasi lewat jalur deposit
+(akuntansi ganda: satu ETH dihitung sebagai pelunasan DAN sebagai
+deposit). Di program bounty nyata: **Critical** — pengurasan total
+dana pool, tanpa modal, tanpa privilege.
+
+### Exploit (PoC — kontrak helper, 3 panggilan efektif)
+
+Kontrak `SideEntranceAttacker` (di file solusi): `attack()` memanggil
+`pool.flashLoan(1.000 ether)`; callback `execute()` memanggil
+`pool.deposit{value: msg.value}()`; kembali di `attack()`,
+`pool.withdraw()` lalu teruskan ETH ke attacker EOA.
+
+### Hasil
+
+```
+forge test --match-contract SideEntrance
+[PASS] testExploit() (gas: 379699)
+Suite result: ok. 1 passed; 0 failed — 5.15ms
+```
+
+### Metrik
+
+| Metrik | Hasil |
+|---|---|
+| Akurasi identifikasi bug | **1/1** — root cause benar percobaan pertama, tanpa false positive |
+| Root cause | Benar + tepat (cek saldo buta terhadap jalur deposit; ETH pinjaman jadi deposit) |
+| Kualitas PoC | Minimal (flash loan → deposit di callback → withdraw) + syarat sukses resmi test |
+| Ketepatan severity | Benar: **Critical** — pengurasan total pool, tanpa modal/privilege |
+| Waktu analisis | **~4 menit** (baca 1 kontrak + test, tulis helper + exploit) |
+| Percobaan gagal | 0 |
+
+**Yang dibawa ke perburuan:** setiap flash loan / callback yang hanya
+mengecek "saldo kembali" WAJIB ditanya: "lewat jalur apa saldo itu
+kembali, dan apakah jalur itu mengubah kepemilikan?" Pola yang sama
+muncul di dunia nyata sebagai: deposit/repay yang berbagi jalur,
+`receive()` yang mengkredit saldo, dan akuntansi yang dihitung dua kali.
+Perbaikan kanonik: cek pelunasan terhadap `balances` (bukan saldo mentah),
+atau kunci `deposit()` selama flash loan berlangsung.
+
+## 10. Tantangan #5 — The Rewarder (fase D, 16 Nov 2026 ~21:53 WIB)
+
+**Deskripsi:** pool reward: deposan DVT mendapat accToken 1:1 + reward
+token (100 per ronde 5 hari, dibagi proporsional menurut snapshot).
+Empat pengguna sudah deposit 100 DVT masing-masing dan mengambil
+reward ronde 2 (25 token tiap orang). Attacker mulai dengan 0 DVT.
+Tujuan: rebut hampir seluruh reward ronde 3 (~100 token) dengan
+flash loan, lalu akhiri dengan 0 DVT.
+
+**Kontrak yang dibaca (sebelum solve):**
+`src/Contracts/the-rewarder/TheRewarderPool.sol` (deposit, withdraw,
+distributeRewards, snapshot), `FlashLoanerPool.sol`, `AccountingToken.sol`,
+test `TheRewarder.t.sol` (syarat sukses: roundNumber 3, reward tiap
+pengguna lama nyaris 0, reward attacker ≈ 100, DVT attacker 0).
+
+### Root cause (identifikasi sendiri dari membaca kode)
+
+```solidity
+function deposit(uint256 amountToDeposit) external {
+    if (amountToDeposit == 0) revert MustDepositTokens();
+    accToken.mint(msg.sender, amountToDeposit);
+    distributeRewards();   // <-- snapshot ronde baru dicatat DI SINI
+    ...
+}
+```
+
+Dua cacat yang bergabung: (1) **urutan operasi**: `deposit()` MINT
+accToken dulu, BARU `distributeRewards()` mencatat snapshot ronde baru
+— jadi snapshot ronde yang baru dimulai sudah mencakup saldo penyerang;
+(2) **snapshot bisa dimanipulasi dengan modal sementara**: flash loan
+1.000.000 DVT (seluruh isi FlashLoanerPool) dideposit tepat saat ronde
+baru dimulai → snapshot mencatat penyerang 1.000.000 vs total 1.000.400
+→ penyerang mendapat ~99,96 dari 100 reward. Lalu withdraw +
+lunasi flash loan — modal kembali 0, reward tetap di tangan penyerang.
+
+**Kelas bug:** snapshot manipulation / urutan mint-sebelum-snapshot
+(oracle akuntansi yang bisa dipompa dengan modal sementara). Di program
+bounty nyata: **High** — pencurian reward pengguna lain (dana nyata,
+~100 token), tapi kerugian terbatas pada satu ronde reward, bukan
+seluruh dana pool.
+
+### Exploit (PoC — kontrak helper + warp)
+
+Kontrak `RewarderAttacker`: `attack()` memanggil
+`flashLoanerPool.flashLoan(1.000.000e18)`; callback `receiveFlashLoan`
+approve → `theRewarderPool.deposit(1.000.000e18)` (mint + snapshot +
+reward) → `withdraw(1.000.000e18)` → lunasi flash loan; lalu
+`attack()` mengirim reward token ke attacker EOA. Sebelumnya,
+test melakukan `vm.warp(block.timestamp + 5 days)` agar ronde baru
+dimulai.
+
+### Hasil
+
+```
+forge test --match-contract TheRewarder
+[PASS] testExploit() (gas: 1575208)
+Suite result: ok. 1 passed; 0 failed — 14.48ms
+```
+
+### Metrik
+
+| Metrik | Hasil |
+|---|---|
+| Akurasi identifikasi bug | **1/1** — root cause benar percobaan pertama, tanpa false positive |
+| Root cause | Benar + tepat (mint dulu baru snapshot + modal flash loan memompa snapshot) |
+| Kualitas PoC | Minimal (1 flash loan + deposit + withdraw) + syarat sukses resmi test |
+| Ketepatan severity | Benar: **High** — reward pengguna lain dicuri (~100 token), kerugian terbatas satu ronde |
+| Waktu analisis | **~5 menit** (baca 3 kontrak + test, tulis helper + warp) |
+| Percobaan gagal | 0 |
+
+**Yang dibawa ke perburuan:** setiap mekanisme reward/snapshot WAJIB
+ditanya: "kapan snapshot diambil RELATIF terhadap perubahan saldo,
+dan bisakah saldo dipompa sementara tepat sebelum snapshot?"
+Pola yang sama muncul di dunia nyata sebagai: voting snapshot yang
+bisa dipompa flash loan, reward yang dihitung dari saldo sesaat,
+dan airdrop berdasarkan snapshot yang bisa dimanipulasi. Perbaikan
+kanonik: snapshot DULU baru mint, atau hitung reward dari saldo
+rata-rata / saldo pada snapshot ronde SEBELUMNYA.
+
+## 11. Tantangan #6 — Selfie (fase D, 16 Nov 2026 ~21:54 WIB)
+
+**Deskripsi:** pool flash loan 1.500.000 token snapshot DVT (total supply
+2.000.000). Governance sederhana: siapa pun yang punya >50% supply
+menurut snapshot TERAKHIR bisa mengantre aksi; aksi dieksekusi setelah
+delay 2 hari. Pool punya `drainAllFunds(receiver)` yang hanya bisa
+dipanggil governance. Tujuan: kuras seluruh token pool ke attacker.
+
+**Kontrak yang dibaca (sebelum solve):**
+`src/Contracts/selfie/SelfiePool.sol` (flashLoan + drainAllFunds),
+`SimpleGovernance.sol` (queueAction, executeAction, `_hasEnoughVotes`),
+test `Selfie.t.sol` (syarat sukses: saldo attacker 1.500.000, saldo pool 0).
+
+### Root cause (identifikasi sendiri dari membaca kode)
+
+```solidity
+function _hasEnoughVotes(address account) private view returns (bool) {
+    uint256 balance = governanceToken.getBalanceAtLastSnapshot(account);
+    uint256 halfTotalSupply = governanceToken.getTotalSupplyAtLastSnapshot() / 2;
+    return balance > halfTotalSupply;
+}
+```
+
+Dua cacat yang bergabung: (1) **voting power dari snapshot TERAKHIR,
+dan siapa pun bisa memicu snapshot baru** — `snapshot()` adalah fungsi
+publik tanpa guard; (2) **flash loan memberi mayoritas sementara**:
+pinjam 1.500.000 dari 2.000.000 total (75%), snapshot DI DALAM callback
+→ saldo snapshot penyerang 1.500.000 > 1.000.000 (setengah supply) →
+bisa mengantre aksi apa pun. Aksi yang diantre: governance memanggil
+`pool.drainAllFunds(attacker)` — `onlyGovernance` terpenuhi karena
+pemanggilnya memang kontrak governance. Lunasi flash loan, tunggu delay
+2 hari (`vm.warp`), eksekusi aksi → pool terkuras. Ini adalah chaining
+tiga langkah (flash loan → snapshot → governance) — tantangan pertama
+yang menuntut lebih dari satu trik.
+
+**Kelas bug:** governance takeover via flash-loan voting power
+(snapshot yang bisa dipicu siapa pun + modal sementara = mayoritas
+sesaat). Di program bounty nyata: **Critical** — pengurasan total dana
+pool + pengambilalihan governance, tanpa modal, tanpa privilege.
+
+### Exploit (PoC — kontrak helper, 3 fase)
+
+Kontrak `SelfieAttacker`: `attack()` memanggil
+`pool.flashLoan(1.500.000e18)`; callback `receiveTokens` melakukan
+`token.snapshot()` → `governance.queueAction(pool,
+drainAllFunds(attacker), 0)` → kembalikan token pinjaman; lalu test
+`vm.warp(block.timestamp + 2 days + 1)` dan
+`governance.executeAction(actionId)`.
+
+### Hasil
+
+```
+forge test --match-contract Selfie
+[PASS] testExploit() (gas: 1243928)
+Suite result: ok. 1 passed; 0 failed — 5.89ms
+```
+
+### Metrik
+
+| Metrik | Hasil |
+|---|---|
+| Akurasi identifikasi bug | **1/1** — root cause benar percobaan pertama, tanpa false positive |
+| Root cause | Benar + tepat (snapshot publik + flash loan mayoritas + governance delay) |
+| Kualitas PoC | Minimal (flash loan → snapshot+queue di callback → warp → execute) + syarat sukses resmi test |
+| Ketepatan severity | Benar: **Critical** — pengurasan total pool + takeover governance |
+| Waktu analisis | **~4 menit** (baca 2 kontrak + test, tulis helper) |
+| Percobaan gagal | 0 |
+
+**Yang dibawa ke perburuan:** setiap mekanisme voting/governance
+berbasis snapshot WAJIB ditanya: "siapa bisa memicu snapshot, dan
+bisakah voting power dipompa sementara tepat sebelumnya?" Pola yang
+sama muncul di dunia nyata sebagai: flash-loan governance attack,
+snapshot token yang bisa dipicu publik, dan quorum yang dihitung dari
+saldo sesaat. Perbaikan kanonik: snapshot hanya oleh kontrak yang
+dipercaya / pada waktu tetap, voting power dari snapshot LAMA (bukan
+terakhir), atau timelock + quorum yang tidak bisa dipompa dalam satu
+transaksi.
+
+## 12. Ringkasan progres benchmark (16 Nov 2026 ~21:54 WIB)
+
+| Tantangan | Root cause | Severity | Waktu analisis | Percobaan gagal | Solusi |
+|---|---|---|---|---|---|
+| #1 Unstoppable | Akuntansi internal vs saldo aktual | Medium (DoS) | ~5 mnt | 0 | `benchmarks/dvd-unstoppable-solution.t.sol` |
+| #2 Naive Receiver | Pemicu pihak ketiga tanpa auth + fee ke korban | High | ~4 mnt | 0 | `benchmarks/dvd-naive-receiver-solution.t.sol` |
+| #3 Truster | Arbitrary call sebagai pool → approve → drain | Critical | ~4 mnt | 0 | `benchmarks/dvd-truster-solution.t.sol` |
+| #4 Side-Entrance | Cek saldo buta jalur deposit → pinjaman jadi deposit | Critical | ~4 mnt | 0 | `benchmarks/dvd-side-entrance-solution.t.sol` |
+| #5 The Rewarder | Mint dulu baru snapshot + flash loan pompa snapshot | High | ~5 mnt | 0 | `benchmarks/dvd-the-rewarder-solution.t.sol` |
+| #6 Selfie | Snapshot publik + flash loan mayoritas → takeover governance | Critical | ~4 mnt | 0 | `benchmarks/dvd-selfie-solution.t.sol` |
+
+**Skor: 6/13.** Akurasi identifikasi 6/6 percobaan pertama, 0 false
+positive, 0 percobaan gagal. **Verifikasi segar fase D:** keenam test
+dijalankan ulang di full port `/tmp/dvd` (`forge test --match-contract`
+per tantangan): 6 passed, 0 failed — gas: Unstoppable 99.499,
+NaiveReceiver 414.730, Truster 152.510, SideEntrance 379.699,
+TheRewarder 1.575.208, Selfie 1.243.928.
+
+**Catatan kejujuran (fase D):** #4–#6 memang menuntut chaining
+(#6: flash loan → snapshot → governance), tapi pola dasarnya masih
+pola yang dikenal dari literatur (side-entrance = varian cek-saldo
+#1; rewarder = snapshot manipulation; selfie = flash-loan governance).
+Yang TERASA baru: #6 adalah pertama kalinya exploit butuh tiga
+langkah lintas-kontrak + time warp — bukan satu trik. Pengukur yang
+sesungguhnya tetap tantangan #7+ (climber, backdoor, free-rider,
+compromised, puppet, puppet-v2, safe-miners), yang menuntut chaining
+lebih dalam dan pola yang kurang dikenal.
