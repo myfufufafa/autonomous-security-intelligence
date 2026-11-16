@@ -1,0 +1,14 @@
+[profile.default]
+src = "src"
+out = "out"
+libs = ["lib"]
+solc = "0.8.24"
+
+[invariant]
+runs = 128
+depth = 100
+fail_on_revert = false
+# Fitur Foundry v1.7+: fuzz jarak waktu/blok antar panggilan — penting
+# untuk logika yang bergantung pada block.timestamp (akrual bunga).
+max_time_delay = 86400
+max_block_delay = 100
