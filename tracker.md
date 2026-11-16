@@ -9,7 +9,7 @@ Laporan: menumpang daily report 08:39 WIB (bagian skill-evolution).
 | Item | Status | Catatan |
 |---|---|---|
 | Repo GitHub | LIVE (push awal selesai) | Dibuat kosong via browser 16 Nov 2026 ~21:06 WIB, struktur awal di-push dari main chat (commit 1e1305e, branch main) — https://github.com/myfufufafa/autonomous-security-intelligence |
-| Discovery pass 1 | BERJALAN | Subagent riset kandidat skill riset keamanan (logic/business-logic DeFi) |
+| Discovery pass 1 | SELESAI (16 Nov 2026) | Laporan: `research/skill-discovery-2026-11-16.md` — 8 kandidat ranking MIT/Apache (teratas: invariant testing lanjut + ItyFuzz + DeFiHackLabs) + daftar ditolak/terblokir lisensi. Adopsi menyusul setelah audit + verifikasi main chat |
 | Skill teradopsi | 0 | Target pass 1: kandidat ter-ranking, adopsi menyusul setelah audit + verifikasi main chat |
 | Benchmark | BELUM DIMULAI | Ethernaut / Damn Vulnerable DeFi / Capture The Ether — direncanakan setelah skill pertama teruji |
 
@@ -22,3 +22,4 @@ Laporan: menumpang daily report 08:39 WIB (bagian skill-evolution).
 
 ## Log
 - 16 Nov 2026 ~21:05 WIB: misi diterima; repo + struktur dibuat; discovery pass 1 dimulai.
+- 16 Nov 2026 ~21:15 WIB: discovery pass 1 SELESAI — laporan `research/skill-discovery-2026-11-16.md` (8 kandidat MIT/Apache ter-ranking + 15 ditolak/terblokir/ditunda dengan alasan). Temuan kunci: tool symbolic/fuzzing terbaik (halmos, echidna, medusa, aderyn) terblokir lisensi AGPL/GPL; trailofbits/skills (CC-BY-SA) bernilai tertinggi tapi butuh keputusan lisensi. Langkah berikut: pass 2 STUDY+PRACTICE+TEST untuk 3 teratas (invariant lanjut, DeFiHackLabs, ItyFuzz) + benchmark DVD.
