@@ -22,4 +22,6 @@ Laporan: menumpang daily report 08:39 WIB (bagian skill-evolution).
 
 ## Log
 - 16 Nov 2026 ~21:05 WIB: misi diterima; repo + struktur dibuat; discovery pass 1 dimulai.
+- 16 Nov 2026 ~21:11 WIB: discovery pass 1 SELESAI (laporan terverifikasi main chat + di-push, commit dd48a85); pass 2 fase A dimulai (invariant lanjut + DeFiHackLabs + DVD baseline).
+- 16 Nov 2026 ~21:13 WIB: Mas mengizinkan studi METODOLOGI tool AGPL/GPL/CC-BY-SA (tulis ulang dengan kata sendiri, tanpa adopsi kode/install). Pass 2 fase B (studi metodologi Halmos/Echidna/Medusa/Aderyn/trailofbits-skills) diantrekan setelah fase A selesai.
 - 16 Nov 2026 ~21:15 WIB: discovery pass 1 SELESAI — laporan `research/skill-discovery-2026-11-16.md` (8 kandidat MIT/Apache ter-ranking + 15 ditolak/terblokir/ditunda dengan alasan). Temuan kunci: tool symbolic/fuzzing terbaik (halmos, echidna, medusa, aderyn) terblokir lisensi AGPL/GPL; trailofbits/skills (CC-BY-SA) bernilai tertinggi tapi butuh keputusan lisensi. Langkah berikut: pass 2 STUDY+PRACTICE+TEST untuk 3 teratas (invariant lanjut, DeFiHackLabs, ItyFuzz) + benchmark DVD.

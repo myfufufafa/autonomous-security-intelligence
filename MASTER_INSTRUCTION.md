@@ -136,6 +136,12 @@ yang baru/berubah — jangan spam.
 ## Batasan keras (perintah Mas)
 - JANGAN mengubah core instructions.
 - JANGAN menginstal kode tidak tepercaya.
+- Pengecualian lisensi (Mas 16 Nov 21:13 WIB): BOLEH mempelajari
+  METODOLOGI tool berlisensi AGPL/GPL/CC-BY-SA (Halmos, Echidna, Medusa,
+  HEVM, Aderyn, 4naly3er, trailofbits/skills, Building Secure Contracts)
+  dan menulis-ulang dengan kata-kata sendiri — TANPA mengadopsi/menyalin
+  kode sumbernya dan TANPA menginstal tool-nya. Studi ini adalah Pass 2
+  fase B, diantrekan setelah fase A selesai.
 - JANGAN menjalankan script eksternal tanpa pemeriksaan keamanan dan izin
   yang sesuai.
 - JANGAN kirim secret/claim code/data pribadi ke Gemini/Groq/OpenRouter.
